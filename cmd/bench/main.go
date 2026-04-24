@@ -23,6 +23,7 @@ import (
 	mrand "math/rand/v2"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -231,6 +232,10 @@ func runBench(ctx context.Context, args []string) error {
 	maxConns := fs.Int("max-conns", 128, "max pool size")
 	output := fs.String("output", "bench_results.json", "machine-readable results path")
 	concurrenciesStr := fs.String("concurrencies", "1,10,100", "comma-separated concurrency levels")
+	workloadsFilter := fs.String("workloads", "", "comma-separated workload names to run (empty = all). options: Get,GetHot,GetMany_100,Put,Batch_5,Mixed_95_5")
+	hotKeys := fs.Int("hot-keys", 100, "key-space size for GetHot: reads are randomly drawn from the first N keys of (ws_000, ns_000) so the plan cache and buffer pool stay warm")
+	loop := fs.Bool("loop", false, "repeat the workload matrix forever instead of exiting after one run")
+	loopInterval := fs.Duration("loop-interval", 30*time.Second, "sleep between iterations when -loop is set")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -275,38 +280,97 @@ func runBench(ctx context.Context, args []string) error {
 
 	layout := keygen.Default()
 
-	workloads := []workload{
+	allWorkloads := []workload{
 		{name: "Get", fn: workloadGet},
+		{name: "GetHot", fn: workloadGetHot(*hotKeys)},
 		{name: "GetMany_100", fn: workloadGetMany(100)},
 		{name: "Put", fn: workloadPut},
 		{name: "Batch_5", fn: workloadBatch(5)},
 		{name: "Mixed_95_5", fn: workloadMixed(0.95)},
 	}
+	workloads, err := filterWorkloads(allWorkloads, *workloadsFilter)
+	if err != nil {
+		return err
+	}
 
-	summaries := make([]benchstats.Summary, 0, len(workloads)*len(concurrencies))
-	for _, wl := range workloads {
-		for _, c := range concurrencies {
-			if ctx.Err() != nil {
-				break
+	iteration := 0
+	for {
+		iteration++
+		if *loop {
+			fmt.Printf("\n=== iteration %d (loop=true, interval=%s) ===\n", iteration, loopInterval.String())
+		}
+
+		summaries := make([]benchstats.Summary, 0, len(workloads)*len(concurrencies))
+		for _, wl := range workloads {
+			for _, c := range concurrencies {
+				if ctx.Err() != nil {
+					return nil
+				}
+				fmt.Printf("> workload=%s concurrency=%d warmup=%s duration=%s\n",
+					wl.name, c, warmup.String(), durationFlag.String())
+				s, runErr := runWorkload(ctx, roPool, rwPool, layout, wl, c, *warmup, *durationFlag)
+				if runErr != nil {
+					return fmt.Errorf("workload %s c=%d: %w", wl.name, c, runErr)
+				}
+				summaries = append(summaries, s)
 			}
-			fmt.Printf("> workload=%s concurrency=%d warmup=%s duration=%s\n",
-				wl.name, c, warmup.String(), durationFlag.String())
-			s, runErr := runWorkload(ctx, roPool, rwPool, layout, wl, c, *warmup, *durationFlag)
-			if runErr != nil {
-				return fmt.Errorf("workload %s c=%d: %w", wl.name, c, runErr)
-			}
-			summaries = append(summaries, s)
+		}
+
+		fmt.Println()
+		fmt.Println(benchstats.FormatTable(summaries))
+
+		if err := writeJSON(*output, summaries); err != nil {
+			return fmt.Errorf("write results: %w", err)
+		}
+		fmt.Printf("wrote %s\n", *output)
+
+		if !*loop {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(*loopInterval):
 		}
 	}
 
+	// Keep the container alive so auto-restart loops don't churn. The
+	// operator exits with SIGTERM / SIGINT.
 	fmt.Println()
-	fmt.Println(benchstats.FormatTable(summaries))
-
-	if err := writeJSON(*output, summaries); err != nil {
-		return fmt.Errorf("write results: %w", err)
-	}
-	fmt.Printf("wrote %s\n", *output)
+	fmt.Println("bench run complete; keeping container alive. send SIGTERM to exit.")
+	<-ctx.Done()
 	return nil
+}
+
+func filterWorkloads(all []workload, filter string) ([]workload, error) {
+	filter = strings.TrimSpace(filter)
+	if filter == "" {
+		return all, nil
+	}
+	want := map[string]struct{}{}
+	for _, name := range strings.Split(filter, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		want[name] = struct{}{}
+	}
+	known := map[string]struct{}{}
+	for _, wl := range all {
+		known[wl.name] = struct{}{}
+	}
+	for name := range want {
+		if _, ok := known[name]; !ok {
+			return nil, fmt.Errorf("unknown workload %q (known: Get, GetHot, GetMany_100, Put, Batch_5, Mixed_95_5)", name)
+		}
+	}
+	out := make([]workload, 0, len(want))
+	for _, wl := range all {
+		if _, ok := want[wl.name]; ok {
+			out = append(out, wl)
+		}
+	}
+	return out, nil
 }
 
 func runWorkload(
@@ -379,6 +443,31 @@ func workloadGet(ctx context.Context, w *worker) error {
 		return nil
 	}
 	return err
+}
+
+// workloadGetHot reads from a fixed hotspot in (ws_000, ns_000) over a
+// small key window. Compared to workloadGet it keeps PG's plan cache
+// and buffer pool hot, so the numbers reflect steady-state read
+// latency on rows that are already in cache. The normal Get workload
+// (random across 10M keys) reflects cold-read latency instead.
+func workloadGetHot(hotKeys int) workloadFn {
+	if hotKeys <= 0 {
+		hotKeys = 100
+	}
+	return func(ctx context.Context, w *worker) error {
+		ws := w.layout.Workspace(0)
+		ns := w.layout.Namespace(0)
+		key := w.layout.Key(w.rng.IntN(hotKeys))
+		var value []byte
+		err := w.roPool.QueryRow(ctx,
+			`SELECT value FROM kv_entries WHERE workspace_id = $1 AND namespace = $2 AND key = $3`,
+			ws, ns, key,
+		).Scan(&value)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
 }
 
 func workloadGetMany(n int) workloadFn {

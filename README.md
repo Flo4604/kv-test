@@ -41,6 +41,21 @@ The first command populates the corpus
 (10 workspaces × 10 namespaces × 100k keys × 1 KB values).
 The second runs the workload matrix and writes `bench_results.json`.
 
+### bench flags
+
+- `-workloads=Get,GetHot,GetMany_100,Put,Batch_5,Mixed_95_5` — filter
+  which workloads to run. Empty means "all". Useful when drilling
+  into one result (`-workloads=GetHot`).
+- `-hot-keys=100` — `GetHot` reads are randomly drawn from the first
+  N keys of `(ws_000, ns_000)` so the PG plan cache and buffer pool
+  stay hot. Contrast with `Get`, which samples across all 10M seeded
+  keys, mostly cold.
+- `-loop` — repeat the workload matrix forever; `-loop-interval=30s`
+  controls the sleep between runs.
+- After one run (or when `-loop` is interrupted) the process blocks
+  on SIGTERM instead of exiting, so container auto-restart does not
+  churn. Send SIGTERM / SIGINT to exit.
+
 ## Run on Unkey Deploy (or any container platform)
 
 ```sh
