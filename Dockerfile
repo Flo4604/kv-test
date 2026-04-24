@@ -1,0 +1,23 @@
+FROM golang:1.25-bookworm AS build
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/bench       ./cmd/bench && \
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/disktier    ./cmd/disktier && \
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-driver  ./cmd/inv-driver && \
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-logical ./cmd/inv-logical && \
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-notify  ./cmd/inv-notify
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/bench       /usr/local/bin/bench
+COPY --from=build /out/disktier    /usr/local/bin/disktier
+COPY --from=build /out/inv-driver  /usr/local/bin/inv-driver
+COPY --from=build /out/inv-logical /usr/local/bin/inv-logical
+COPY --from=build /out/inv-notify  /usr/local/bin/inv-notify
+
+ENTRYPOINT []
+CMD ["/usr/local/bin/bench", "bench"]

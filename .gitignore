@@ -1,0 +1,7 @@
+/bin/
+/dist/
+*_results.json
+*_lag.json
+*.bolt
+/tmp/
+.DS_Store
