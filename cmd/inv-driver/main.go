@@ -58,7 +58,9 @@ func run() error {
 	}
 	fmt.Println(res.Format())
 
-	fmt.Println("inv-driver run complete; keeping container alive. send SIGTERM to exit.")
-	<-ctx.Done()
+	if os.Getenv("KV_SPIKE_RUN_ALL") == "" {
+		fmt.Println("inv-driver run complete; keeping container alive. send SIGTERM to exit.")
+		<-ctx.Done()
+	}
 	return nil
 }

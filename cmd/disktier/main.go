@@ -130,7 +130,15 @@ func run() error {
 		fmt.Println(benchstats.FormatTable(r.Workloads))
 	}
 
-	return writeJSON(*output, results)
+	if err := writeJSON(*output, results); err != nil {
+		return err
+	}
+
+	if os.Getenv("KV_SPIKE_RUN_ALL") == "" {
+		fmt.Println("disktier run complete; keeping container alive. send SIGTERM to exit.")
+		<-ctx.Done()
+	}
+	return nil
 }
 
 func runEngine(

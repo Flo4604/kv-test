@@ -216,9 +216,11 @@ func run() error {
 		fmt.Printf("      SELECT pg_drop_replication_slot('%s');\n", *slot)
 	}
 
-	fmt.Println()
-	fmt.Println("inv-bakeoff complete; keeping container alive. send SIGTERM to exit.")
-	<-ctx.Done()
+	if os.Getenv("KV_SPIKE_RUN_ALL") == "" {
+		fmt.Println()
+		fmt.Println("inv-bakeoff complete; keeping container alive. send SIGTERM to exit.")
+		<-ctx.Done()
+	}
 	return nil
 }
 

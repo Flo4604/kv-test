@@ -334,11 +334,13 @@ func runBench(ctx context.Context, args []string) error {
 		}
 	}
 
-	// Keep the container alive so auto-restart loops don't churn. The
-	// operator exits with SIGTERM / SIGINT.
-	fmt.Println()
-	fmt.Println("bench run complete; keeping container alive. send SIGTERM to exit.")
-	<-ctx.Done()
+	// Keep the container alive so auto-restart loops don't churn,
+	// unless run-all is orchestrating us (it'll keep-alive itself).
+	if os.Getenv("KV_SPIKE_RUN_ALL") == "" {
+		fmt.Println()
+		fmt.Println("bench run complete; keeping container alive. send SIGTERM to exit.")
+		<-ctx.Done()
+	}
 	return nil
 }
 

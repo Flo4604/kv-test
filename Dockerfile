@@ -11,7 +11,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/bench       ./cmd/
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-bakeoff ./cmd/inv-bakeoff && \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-driver  ./cmd/inv-driver && \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-logical ./cmd/inv-logical && \
-    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-notify  ./cmd/inv-notify
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/inv-notify  ./cmd/inv-notify && \
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/run-all     ./cmd/run-all
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/bench       /usr/local/bin/bench
@@ -20,6 +21,7 @@ COPY --from=build /out/inv-bakeoff /usr/local/bin/inv-bakeoff
 COPY --from=build /out/inv-driver  /usr/local/bin/inv-driver
 COPY --from=build /out/inv-logical /usr/local/bin/inv-logical
 COPY --from=build /out/inv-notify  /usr/local/bin/inv-notify
+COPY --from=build /out/run-all     /usr/local/bin/run-all
 
 ENTRYPOINT []
-CMD ["/usr/local/bin/bench", "bench"]
+CMD ["/usr/local/bin/run-all"]

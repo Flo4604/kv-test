@@ -68,8 +68,10 @@ func run() error {
 		return err
 	}
 
-	fmt.Println("inv-notify run complete; keeping container alive. send SIGTERM to exit.")
-	<-ctx.Done()
+	if os.Getenv("KV_SPIKE_RUN_ALL") == "" {
+		fmt.Println("inv-notify run complete; keeping container alive. send SIGTERM to exit.")
+		<-ctx.Done()
+	}
 	return nil
 }
 

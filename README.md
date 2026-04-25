@@ -65,7 +65,29 @@ docker build -t kv-spike .
 The image bundles six binaries under `/usr/local/bin/`. Default `CMD`
 runs `bench bench`. Override to run a different harness.
 
-### Easy path: one binary for the invalidation bakeoff
+### Easiest path: one binary for the whole spike
+
+`run-all` is the default `CMD`. Deploy with `DATABASE_URL_RW` set and
+it runs `disktier` → `bench` → `inv-bakeoff` in sequence, then blocks
+on SIGTERM:
+
+```sh
+docker run --rm -e DATABASE_URL_RW=... kv-spike
+```
+
+Tunables (all forwarded to the right child binary):
+
+```sh
+docker run --rm -e DATABASE_URL_RW=... kv-spike /usr/local/bin/run-all \
+  -bench-duration=20s \
+  -driver-duration=120s \
+  -inv-reconnect
+
+docker run --rm -e DATABASE_URL_RW=... kv-spike /usr/local/bin/run-all \
+  -only=inv-bakeoff
+```
+
+### Just the invalidation bakeoff
 
 ```sh
 docker run --rm -e DATABASE_URL_RW=... kv-spike /usr/local/bin/inv-bakeoff
