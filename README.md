@@ -62,11 +62,33 @@ The second runs the workload matrix and writes `bench_results.json`.
 docker build -t kv-spike .
 ```
 
-The image contains all five binaries under `/usr/local/bin/`. Default
-`CMD` runs `bench bench`. Override to run a different harness:
+The image bundles six binaries under `/usr/local/bin/`. Default `CMD`
+runs `bench bench`. Override to run a different harness.
+
+### Easy path: one binary for the invalidation bakeoff
 
 ```sh
-# disk tier bakeoff
+docker run --rm -e DATABASE_URL_RW=... kv-spike /usr/local/bin/inv-bakeoff
+```
+
+`inv-bakeoff` runs the full bakeoff in one process: starts the
+logical-replication subscriber and the LISTEN/NOTIFY subscriber, waits
+for them to attach, runs the driver for 60s @ 1k/s, drains the
+subscribers, prints both lag tables, and stays alive afterwards.
+No coordination, no three deploys.
+
+For the reconnect test:
+```sh
+docker run --rm -e DATABASE_URL_RW=... kv-spike \
+  /usr/local/bin/inv-bakeoff -reconnect -driver-duration=120s
+```
+Both subscribers will cut after 30s, sleep 30s, and reconnect; the
+output reports whether each one replayed its missed events.
+
+### Advanced: standalone binaries
+
+```sh
+# disk tier bakeoff (no DB needed)
 docker run --rm kv-spike /usr/local/bin/disktier -keys=100000 -duration=20s
 
 # logical replication subscriber
