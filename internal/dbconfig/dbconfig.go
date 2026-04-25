@@ -106,14 +106,9 @@ func Open(ctx context.Context, url string, opts PoolOptions) (*pgxpool.Pool, err
 	// prepared-statement collisions, drop to QueryExecModeExec.
 	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
 
-	// Postgres-side statement timeout to keep one bad query from
-	// pinning a backend forever under PgBouncer transaction pooling.
-	if cfg.ConnConfig.RuntimeParams == nil {
-		cfg.ConnConfig.RuntimeParams = map[string]string{}
-	}
-	if _, set := cfg.ConnConfig.RuntimeParams["statement_timeout"]; !set {
-		cfg.ConnConfig.RuntimeParams["statement_timeout"] = "30000" // 30s
-	}
+	// Note: we'd love to set statement_timeout here, but PS's
+	// PgBouncer rejects it as an unsupported startup parameter. If
+	// you need a per-query timeout, pass a context with a deadline.
 
 	if opts.MinConns > 0 {
 		cfg.MinConns = opts.MinConns
