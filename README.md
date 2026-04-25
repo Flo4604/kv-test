@@ -68,8 +68,10 @@ runs `bench bench`. Override to run a different harness.
 ### Easiest path: one binary for the whole spike
 
 `run-all` is the default `CMD`. Deploy with `DATABASE_URL_RW` set and
-it runs `disktier` → `bench` → `inv-bakeoff` in sequence, then blocks
-on SIGTERM:
+it runs `bench` → `inv-bakeoff`, then blocks on SIGTERM. **disktier
+is skipped by default** because container ephemeral storage isn't
+representative; run disktier locally for honest disk numbers (see
+below).
 
 ```sh
 docker run --rm -e DATABASE_URL_RW=... kv-spike

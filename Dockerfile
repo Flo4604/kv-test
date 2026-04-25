@@ -24,4 +24,8 @@ COPY --from=build /out/inv-notify  /usr/local/bin/inv-notify
 COPY --from=build /out/run-all     /usr/local/bin/run-all
 
 ENTRYPOINT []
-CMD ["/usr/local/bin/run-all"]
+# Default: skip disktier. Container ephemeral storage is not
+# representative of what a real KV node's disk tier would run on
+# (bare-metal NVMe), so the numbers would be misleading. Run
+# disktier locally on real disk, or override CMD to include it.
+CMD ["/usr/local/bin/run-all", "-skip=disktier"]
