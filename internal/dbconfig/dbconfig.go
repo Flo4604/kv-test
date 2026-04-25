@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -92,6 +93,28 @@ func Open(ctx context.Context, url string, opts PoolOptions) (*pgxpool.Pool, err
 	if err != nil {
 		return nil, fmt.Errorf("dbconfig: parse URL: %w", err)
 	}
+
+	// PlanetScale Postgres fronts the cluster with PgBouncer in
+	// transaction pooling mode. The default pgx exec mode
+	// (cache_statement) uses named prepared statements which can
+	// outlive the backend they were prepared on once PgBouncer rotates
+	// servers between transactions, leading to "prepared statement
+	// does not exist" errors at the worst times. cache_describe uses
+	// unnamed (parse-once-bind-many) statements that are safe across
+	// transaction boundaries while still avoiding a Parse round-trip
+	// on every query. If you ever see weird errors that look like
+	// prepared-statement collisions, drop to QueryExecModeExec.
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
+
+	// Postgres-side statement timeout to keep one bad query from
+	// pinning a backend forever under PgBouncer transaction pooling.
+	if cfg.ConnConfig.RuntimeParams == nil {
+		cfg.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	if _, set := cfg.ConnConfig.RuntimeParams["statement_timeout"]; !set {
+		cfg.ConnConfig.RuntimeParams["statement_timeout"] = "30000" // 30s
+	}
+
 	if opts.MinConns > 0 {
 		cfg.MinConns = opts.MinConns
 	}

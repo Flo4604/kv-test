@@ -144,7 +144,13 @@ func run() error {
 		fmt.Println("NOTE: events produced during the disconnect window are permanently lost.")
 		fmt.Println("      An anti-entropy sweep is required to make LISTEN/NOTIFY viable.")
 	}
-	return writeJSON(*output, summary, missed)
+	if err := writeJSON(*output, summary, missed); err != nil {
+		return err
+	}
+
+	fmt.Println("inv-notify run complete; keeping container alive. send SIGTERM to exit.")
+	<-ctx.Done()
+	return nil
 }
 
 func pumpNotifies(ctx context.Context, conn *pgx.Conn, pool *pgxpool.Pool, rec *benchstats.Recorder) error {

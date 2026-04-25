@@ -138,7 +138,13 @@ func run() error {
 		fmt.Printf("reconnect: replayed %d events from WAL after the simulated cut (no data loss).\n",
 			eventsAfterReconnect)
 	}
-	return writeJSON(*output, summary, replayedAfterGap, eventsAfterReconnect)
+	if err := writeJSON(*output, summary, replayedAfterGap, eventsAfterReconnect); err != nil {
+		return err
+	}
+
+	fmt.Println("inv-logical run complete; keeping container alive. send SIGTERM to exit.")
+	<-ctx.Done()
+	return nil
 }
 
 func ensureSlot(ctx context.Context, url, slot string) error {

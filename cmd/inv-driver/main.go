@@ -136,5 +136,8 @@ func run() error {
 	wg.Wait()
 	fmt.Printf("inv-driver done: committed=%d failed=%d target=%d\n",
 		committed.Load(), failed.Load(), produced.Load())
+
+	fmt.Println("inv-driver run complete; keeping container alive. send SIGTERM to exit.")
+	<-ctx.Done()
 	return nil
 }
