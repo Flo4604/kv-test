@@ -54,8 +54,12 @@ func run() error {
 	only := fs.String("only", "", "comma-separated steps to run (overrides -skip)")
 
 	// Per-step knobs the user typically wants to tune at deploy time.
-	disktierKeys := fs.Int("disktier-keys", 100_000, "disktier: number of distinct keys")
-	disktierDuration := fs.Duration("disktier-duration", 15*time.Second, "disktier: per-workload duration")
+	// disktier defaults: small corpus + short windows. The disk on
+	// Unkey Deploy is not representative; for honest numbers run
+	// disktier locally on a real NVMe. These defaults exist so
+	// run-all completes in a reasonable time when included.
+	disktierKeys := fs.Int("disktier-keys", 20_000, "disktier: number of distinct keys")
+	disktierDuration := fs.Duration("disktier-duration", 8*time.Second, "disktier: per-workload duration")
 
 	benchDuration := fs.Duration("bench-duration", 10*time.Second, "bench: per-workload duration")
 	benchMaxConns := fs.Int("bench-max-conns", 20, "bench: max pool size")

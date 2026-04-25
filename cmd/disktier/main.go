@@ -342,7 +342,12 @@ func (p *pebbleEngine) Get(key []byte) ([]byte, error) {
 	return out, closer.Close()
 }
 func (p *pebbleEngine) Put(key, value []byte) error {
-	return p.db.Set(key, value, pebble.Sync)
+	// NoSync: skip the per-write WAL fsync. We're benchmarking
+	// throughput and latency under steady-state, not durability under
+	// crash. Sync makes seeding hours-long on slow ephemeral disks
+	// and isn't representative of what the real KV cache layer would
+	// pay either (it'd batch writes anyway).
+	return p.db.Set(key, value, pebble.NoSync)
 }
 func (p *pebbleEngine) Close() error { return p.db.Close() }
 
